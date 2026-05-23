@@ -153,9 +153,12 @@
   - Double-tap (toggle 100%/200%)
   - Ctrl/Cmd + Scroll (desktop zoom)
   
-- [x] **UI Elements**
-  - Zoom indicator (shows %, fades after 1.5s)
-  - Fit to page button (⊡)
+- [x] **UI Controls**
+  - Zoom buttons at bottom-right (+/- with percentage)
+  - Click percentage to fit-to-page
+  - Horizontal pan slider (bottom-center, when zoomed)
+  - Vertical pan slider (right-center, when zoomed)
+  - Draggable thumbs for precise positioning
   - Smooth CSS transforms
   - 60fps GPU-accelerated
   
@@ -163,6 +166,7 @@
   - Coordinates transformed correctly
   - Drawing works at any zoom level
   - Two-finger gestures don't interfere
+  - Sliders only appear when zoom > 100%
 
 ### 🎨 UI/UX (iPad State-of-the-Art)
 - [x] **Glassmorphism**
