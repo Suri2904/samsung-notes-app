@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 2,
+  "id": "test-v1-migration-001",
+  "title": "V1 Test Drawing",
+  "createdAt": "2025-01-01T10:00:00.000Z",
+  "updatedAt": "2025-01-15T14:30:00.000Z",
+  "zoom": 1,
+  "pan": {
+    "x": 0,
+    "y": 0
+  },
+  "currentPageIndex": 0,
+  "pages": [
+    {
+      "id": "798e9732-7f28-4ff1-8d90-767dbe4b7930",
+      "size": "A4",
+      "orientation": "landscape",
+      "backgroundPattern": "ruled",
+      "strokes": [
+        {
+          "id": "c8c7bc83-8ed9-4dff-a410-b740ddf79990",
+          "tool": "pen",
+          "color": "#FF0000",
+          "size": "M",
+          "points": [
+            {
+              "x": 100,
+              "y": 100,
+              "pressure": 0.5
+            },
+            {
+              "x": 200,
+              "y": 150,
+              "pressure": 0.7
+            },
+            {
+              "x": 300,
+              "y": 100,
+              "pressure": 0.6
+            }
+          ]
+        },
+        {
+          "id": "79b13eef-deb9-4b41-a4c8-e0d84c9f38c3",
+          "tool": "highlighter",
+          "color": "#FFFF00",
+          "size": "L",
+          "points": [
+            {
+              "x": 150,
+              "y": 200,
+              "pressure": 0.5
+            },
+            {
+              "x": 350,
+              "y": 200,
+              "pressure": 0.5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "40ef5d6e-2892-4200-8740-09da4793e358",
+      "size": "A4",
+      "orientation": "landscape",
+      "backgroundPattern": "grid",
+      "strokes": [
+        {
+          "id": "3e8963d6-4d11-4c00-957c-011eb4c4f44d",
+          "tool": "fountain",
+          "color": "#0000FF",
+          "size": "S",
+          "points": [
+            {
+              "x": 50,
+              "y": 50,
+              "pressure": 0.3
+            },
+            {
+              "x": 100,
+              "y": 100,
+              "pressure": 0.8
+            },
+            {
+              "x": 150,
+              "y": 50,
+              "pressure": 0.4
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
