@@ -6,6 +6,7 @@ import { useToastContext } from '../../context/ToastContext';
 import { storage } from '../../utils/storage';
 import { DrawingToolbar } from './DrawingToolbar';
 import { PageManager } from './PageManager';
+import { ZoomControls } from './ZoomControls';
 import jsPDF from 'jspdf';
 import './DrawingCanvas.css';
 
@@ -76,7 +77,7 @@ export const DrawingCanvas = ({ drawing, onBack }) => {
   }, [lastSaved]);
 
   // Zoom and Pan
-  const { zoom, pan, showZoomIndicator, screenToCanvas, fitToPage, handleDoubleTap } = useZoomPan(canvasRef);
+  const { zoom, pan, screenToCanvas, fitToPage, handleDoubleTap, setZoomLevel } = useZoomPan(canvasRef);
 
   // Initialize canvas on mount
   useEffect(() => {
@@ -426,20 +427,14 @@ export const DrawingCanvas = ({ drawing, onBack }) => {
           />
         </div>
 
-        {/* Zoom indicator */}
-        {showZoomIndicator && (
-          <div className="zoom-indicator">
-            {Math.round(zoom * 100)}%
-          </div>
-        )}
-
-        {/* Fit to page button */}
-        {zoom !== 1 && (
-          <button className="fit-to-page-btn" onClick={fitToPage} title="Fit to page">
-            ⊡
-          </button>
-        )}
       </div>
+
+      {/* Zoom Controls */}
+      <ZoomControls
+        zoom={zoom}
+        onZoomChange={setZoomLevel}
+        onFitToPage={fitToPage}
+      />
 
       {/* Left toolbar */}
       <DrawingToolbar

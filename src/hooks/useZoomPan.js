@@ -38,11 +38,11 @@ export const useZoomPan = (canvasRef) => {
 
     if (clampedZoom === zoom) return;
 
-    // Zoom towards the center point
+    // If no center point provided, zoom towards canvas center
     const rect = canvasRef.current?.getBoundingClientRect();
     if (rect) {
-      const x = centerX - rect.left;
-      const y = centerY - rect.top;
+      const x = centerX !== undefined ? centerX - rect.left : rect.width / 2;
+      const y = centerY !== undefined ? centerY - rect.top : rect.height / 2;
 
       // Adjust pan to zoom towards the point
       const newPan = {
@@ -54,8 +54,7 @@ export const useZoomPan = (canvasRef) => {
     }
 
     setZoom(clampedZoom);
-    flashZoomIndicator();
-  }, [zoom, pan, flashZoomIndicator]);
+  }, [zoom, pan]);
 
   // Handle pinch gesture
   const handlePinch = useCallback((touches) => {
@@ -181,12 +180,18 @@ export const useZoomPan = (canvasRef) => {
     };
   }, [handleTouchStart, handleTouchMove, handleTouchEnd, handleWheel]);
 
+  // Simple zoom change (for button controls)
+  const setZoomLevel = useCallback((newZoom) => {
+    handleZoom(newZoom);
+  }, [handleZoom]);
+
   return {
     zoom,
     pan,
     showZoomIndicator,
     screenToCanvas,
     fitToPage,
-    handleDoubleTap
+    handleDoubleTap,
+    setZoomLevel
   };
 };
