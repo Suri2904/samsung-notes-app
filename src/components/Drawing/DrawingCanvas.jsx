@@ -7,6 +7,7 @@ import { storage } from '../../utils/storage';
 import { DrawingToolbar } from './DrawingToolbar';
 import { PageManager } from './PageManager';
 import { ZoomControls } from './ZoomControls';
+import { PanSliders } from './PanSliders';
 import jsPDF from 'jspdf';
 import './DrawingCanvas.css';
 
@@ -77,7 +78,7 @@ export const DrawingCanvas = ({ drawing, onBack }) => {
   }, [lastSaved]);
 
   // Zoom and Pan
-  const { zoom, pan, screenToCanvas, fitToPage, handleDoubleTap, setZoomLevel } = useZoomPan(canvasRef);
+  const { zoom, pan, screenToCanvas, fitToPage, handleDoubleTap, setZoomLevel, setPanPosition } = useZoomPan(canvasRef);
 
   // Initialize canvas on mount
   useEffect(() => {
@@ -434,6 +435,14 @@ export const DrawingCanvas = ({ drawing, onBack }) => {
         zoom={zoom}
         onZoomChange={setZoomLevel}
         onFitToPage={fitToPage}
+      />
+
+      {/* Pan Sliders */}
+      <PanSliders
+        zoom={zoom}
+        pan={pan}
+        onPanChange={setPanPosition}
+        canvasRef={canvasRef}
       />
 
       {/* Left toolbar */}

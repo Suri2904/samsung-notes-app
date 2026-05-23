@@ -185,6 +185,11 @@ export const useZoomPan = (canvasRef) => {
     handleZoom(newZoom);
   }, [handleZoom]);
 
+  // Simple pan change (for slider controls)
+  const setPanPosition = useCallback((newPan) => {
+    setPan(newPan);
+  }, []);
+
   return {
     zoom,
     pan,
@@ -192,6 +197,7 @@ export const useZoomPan = (canvasRef) => {
     screenToCanvas,
     fitToPage,
     handleDoubleTap,
-    setZoomLevel
+    setZoomLevel,
+    setPanPosition
   };
 };
