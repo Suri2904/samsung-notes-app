@@ -111,6 +111,62 @@ export const useDrawing = (pageSize = 'a4', pageOrientation = 'landscape') => {
     }
   };
 
+  // Redraw all strokes from state onto canvas
+  const redrawAllStrokes = useCallback((strokesList) => {
+    const ctx = contextRef.current;
+    const canvas = canvasRef.current;
+    if (!ctx || !canvas || !strokesList) return;
+
+    strokesList.forEach(stroke => {
+      if (!stroke.points || stroke.points.length === 0) return;
+
+      ctx.save();
+
+      // Set tool properties
+      if (stroke.tool === 'eraser') {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.strokeStyle = 'rgba(0,0,0,1)';
+        ctx.lineWidth = stroke.size * 4;
+      } else if (stroke.tool === 'highlighter') {
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.strokeStyle = stroke.color;
+        ctx.globalAlpha = 0.3;
+        ctx.lineWidth = stroke.size * 3;
+      } else {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = stroke.size;
+      }
+
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      // Draw the stroke path
+      ctx.beginPath();
+      ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+
+      for (let i = 1; i < stroke.points.length; i++) {
+        const point = stroke.points[i];
+        const prevPoint = stroke.points[i - 1];
+
+        // Smooth curves using quadraticCurveTo
+        const midX = (prevPoint.x + point.x) / 2;
+        const midY = (prevPoint.y + point.y) / 2;
+        ctx.quadraticCurveTo(prevPoint.x, prevPoint.y, midX, midY);
+      }
+
+      // Draw to the last point
+      if (stroke.points.length > 1) {
+        const lastPoint = stroke.points[stroke.points.length - 1];
+        ctx.lineTo(lastPoint.x, lastPoint.y);
+      }
+
+      ctx.stroke();
+      ctx.restore();
+    });
+  }, []);
+
   const getPointerPos = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -329,8 +385,18 @@ export const useDrawing = (pageSize = 'a4', pageOrientation = 'landscape') => {
 
     drawBackground(ctx, pageDims.width, pageDims.height);
 
-    // Load image if available - draw at logical size (for backward compatibility)
-    if (data.imageData) {
+    // Set strokes - ensure they have IDs for V2 schema
+    const strokesWithIds = (data.strokes || []).map(stroke => ({
+      ...stroke,
+      id: stroke.id || crypto.randomUUID()
+    }));
+    setAllStrokes(strokesWithIds);
+
+    // Redraw all strokes from state (V2: render from strokes, not imageData)
+    redrawAllStrokes(strokesWithIds);
+
+    // Fallback: Load image if available (V1 backward compatibility)
+    if (data.imageData && (!data.strokes || data.strokes.length === 0)) {
       const img = new Image();
       img.onload = () => {
         // Draw the image at the logical coordinate size (accounting for DPR scaling)
@@ -338,14 +404,7 @@ export const useDrawing = (pageSize = 'a4', pageOrientation = 'landscape') => {
       };
       img.src = data.imageData;
     }
-
-    // Set strokes - ensure they have IDs for V2 schema
-    const strokesWithIds = (data.strokes || []).map(stroke => ({
-      ...stroke,
-      id: stroke.id || crypto.randomUUID()
-    }));
-    setAllStrokes(strokesWithIds);
-  }, [getPageDimensions]);
+  }, [getPageDimensions, redrawAllStrokes]);
 
   return {
     canvasRef,
