@@ -1,19 +1,24 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useDrawing } from '../../hooks/useDrawing';
+import { useAutoSave } from '../../hooks/useAutoSave';
+import { useZoomPan } from '../../hooks/useZoomPan';
+import { useToastContext } from '../../context/ToastContext';
+import { storage } from '../../utils/storage';
 import { DrawingToolbar } from './DrawingToolbar';
 import { PageManager } from './PageManager';
 import jsPDF from 'jspdf';
 import './DrawingCanvas.css';
 
-export const DrawingCanvas = ({ title, initialData, onBack, onSave, onDelete }) => {
-  const [editableTitle, setEditableTitle] = useState(title || 'Untitled Drawing');
-  const [pages, setPages] = useState(initialData?.pages || [null]); // Array of page data
+export const DrawingCanvas = ({ drawing, onBack }) => {
+  const [editableTitle, setEditableTitle] = useState(drawing.title || 'Untitled Drawing');
+  const [pages, setPages] = useState(drawing.pages || [null]);
   const [currentPage, setCurrentPage] = useState(0);
   const [showBackgroundMenu, setShowBackgroundMenu] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showPageSizeMenu, setShowPageSizeMenu] = useState(false);
-  const [pageSize, setPageSize] = useState(initialData?.pageSize || 'a4'); // 'a4' or 'a3'
-  const [pageOrientation, setPageOrientation] = useState(initialData?.orientation || 'landscape'); // 'portrait' or 'landscape'
+  const [pageSize, setPageSize] = useState(drawing.pageSize || 'a4');
+  const [pageOrientation, setPageOrientation] = useState(drawing.orientation || 'landscape');
+  const toast = useToastContext();
 
   const {
     canvasRef,
@@ -39,6 +44,40 @@ export const DrawingCanvas = ({ title, initialData, onBack, onSave, onDelete }) 
     canRedo
   } = useDrawing(pageSize, pageOrientation);
 
+  // Get complete drawing data for auto-save
+  const getCompleteDrawingData = useCallback(() => {
+    // Save current page first
+    const currentPageData = getDrawingData();
+    const allPages = pages.map((page, i) => i === currentPage ? currentPageData : page);
+
+    return {
+      title: editableTitle,
+      pageSize,
+      orientation: pageOrientation,
+      pages: allPages
+    };
+  }, [editableTitle, pageSize, pageOrientation, pages, currentPage, getDrawingData]);
+
+  // Auto-save integration
+  const { lastSaved, isSaving, debouncedSave } = useAutoSave(
+    drawing.id,
+    getCompleteDrawingData,
+    30000 // 30 seconds
+  );
+
+  // Format last saved time
+  const lastSavedText = useMemo(() => {
+    if (!lastSaved) return '';
+    const seconds = Math.floor((Date.now() - lastSaved.getTime()) / 1000);
+    if (seconds < 5) return '● Saved';
+    if (seconds < 60) return `Saved ${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    return `Saved ${minutes}m ago`;
+  }, [lastSaved]);
+
+  // Zoom and Pan
+  const { zoom, pan, showZoomIndicator, screenToCanvas, fitToPage, handleDoubleTap } = useZoomPan(canvasRef);
+
   // Initialize canvas on mount
   useEffect(() => {
     initCanvas();
@@ -46,12 +85,17 @@ export const DrawingCanvas = ({ title, initialData, onBack, onSave, onDelete }) 
 
   // Load initial data once on mount
   useEffect(() => {
-    if (initialData?.pages?.[0]) {
+    if (drawing.pages?.[0]) {
       setTimeout(() => {
-        loadDrawingData(initialData.pages[0]);
+        loadDrawingData(drawing.pages[0]);
       }, 100);
     }
   }, []); // Only run once on mount
+
+  // Trigger auto-save on stroke end, page change, tool change
+  useEffect(() => {
+    debouncedSave();
+  }, [pages, currentPage, currentTool, background]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -138,33 +182,30 @@ export const DrawingCanvas = ({ title, initialData, onBack, onSave, onDelete }) 
     }, 50);
   };
 
-  // Save drawing as JSON
-  const handleSaveDrawing = () => {
-    // Prompt for filename
-    const fileName = prompt('Enter file name:', editableTitle);
-    if (!fileName) return; // User cancelled
-
+  // Export drawing as JSON file
+  const handleExportJSON = () => {
     saveCurrentPage();
 
     const drawingFile = {
       version: 1,
-      title: fileName,
+      id: drawing.id,
+      title: editableTitle,
       pageSize: pageSize,
       orientation: pageOrientation,
       pages: pages.map((page, i) => i === currentPage ? getDrawingData() : page),
-      createdAt: new Date().toISOString()
+      createdAt: drawing.createdAt,
+      lastModified: new Date().toISOString()
     };
 
     const blob = new Blob([JSON.stringify(drawingFile, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${fileName}.samsungnote.json`;
+    a.download = `${editableTitle}.samsungnote.json`;
     a.click();
     URL.revokeObjectURL(url);
 
-    // Update the title if changed
-    setEditableTitle(fileName);
+    toast.success('Drawing exported as JSON');
   };
 
   // Export as PDF
@@ -191,21 +232,22 @@ export const DrawingCanvas = ({ title, initialData, onBack, onSave, onDelete }) 
     }
 
     pdf.save(`${editableTitle}.pdf`);
+    toast.success('PDF downloaded');
   };
 
   // Share (copy as image)
   const handleShare = async () => {
-    const dataURL = getCanvasDataURL();
-    const blob = await (await fetch(dataURL)).blob();
-
     try {
+      const dataURL = getCanvasDataURL();
+      const blob = await (await fetch(dataURL)).blob();
+
       await navigator.clipboard.write([
         new ClipboardItem({ 'image/png': blob })
       ]);
-      alert('Drawing copied to clipboard!');
+      toast.success('Copied to clipboard!');
     } catch (err) {
       console.error('Failed to copy:', err);
-      alert('Failed to copy drawing');
+      toast.error('Failed to copy drawing');
     }
   };
 
@@ -216,16 +258,25 @@ export const DrawingCanvas = ({ title, initialData, onBack, onSave, onDelete }) 
 
   const handleDeleteConfirm = () => {
     setShowDeleteConfirm(false);
-    if (onDelete) onDelete();
+    try {
+      storage.deleteDrawing(drawing.id);
+      toast.success('Drawing deleted');
+      onBack();
+    } catch (err) {
+      toast.error('Failed to delete drawing');
+    }
   };
 
-  // Handle pointer events
+  // Handle pointer events (with zoom/pan transformation)
   const handlePointerDown = (e) => {
+    if (e.touches && e.touches.length === 2) return; // Let zoom/pan handle this
     e.preventDefault();
+    handleDoubleTap(e);
     startDrawing(e);
   };
 
   const handlePointerMove = (e) => {
+    if (e.touches && e.touches.length === 2) return; // Let zoom/pan handle this
     e.preventDefault();
     draw(e);
   };
@@ -250,6 +301,13 @@ export const DrawingCanvas = ({ title, initialData, onBack, onSave, onDelete }) 
           onChange={(e) => setEditableTitle(e.target.value)}
           placeholder="Drawing Title"
         />
+
+        {/* Auto-save indicator */}
+        {lastSavedText && (
+          <div className="save-indicator">
+            {lastSavedText}
+          </div>
+        )}
 
         <div className="top-toolbar-actions">
           <button
@@ -327,8 +385,8 @@ export const DrawingCanvas = ({ title, initialData, onBack, onSave, onDelete }) 
             </div>
           )}
 
-          <button className="toolbar-action-btn" onClick={handleSaveDrawing} title="Save Drawing (Editable)">
-            💾 Save
+          <button className="toolbar-action-btn" onClick={handleExportJSON} title="Export as JSON (Editable)">
+            💾 Export
           </button>
 
           <button className="toolbar-action-btn" onClick={handleDownloadPDF} title="Download PDF (Read-only)">
@@ -347,15 +405,40 @@ export const DrawingCanvas = ({ title, initialData, onBack, onSave, onDelete }) 
 
       {/* Canvas */}
       <div className="canvas-wrapper">
-        <canvas
-          ref={canvasRef}
-          className="drawing-canvas"
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
-          style={{ touchAction: 'none' }}
-        />
+        <div
+          className="canvas-transform-wrapper"
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: '0 0'
+          }}
+        >
+          <canvas
+            ref={canvasRef}
+            className="drawing-canvas"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
+            onTouchStart={handlePointerDown}
+            onTouchMove={handlePointerMove}
+            onTouchEnd={handlePointerUp}
+            style={{ touchAction: 'none' }}
+          />
+        </div>
+
+        {/* Zoom indicator */}
+        {showZoomIndicator && (
+          <div className="zoom-indicator">
+            {Math.round(zoom * 100)}%
+          </div>
+        )}
+
+        {/* Fit to page button */}
+        {zoom !== 1 && (
+          <button className="fit-to-page-btn" onClick={fitToPage} title="Fit to page">
+            ⊡
+          </button>
+        )}
       </div>
 
       {/* Left toolbar */}
