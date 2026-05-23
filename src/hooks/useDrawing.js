@@ -139,8 +139,9 @@ export const useDrawing = (pageSize = 'a4', pageOrientation = 'landscape') => {
     lastPointRef.current = pos;
     strokePathRef.current = [pos];
 
-    // Initialize current stroke data
+    // Initialize current stroke data with V2 schema
     currentStrokeRef.current = {
+      id: crypto.randomUUID(), // V2: stroke ID
       tool: currentTool,
       color: currentColor,
       size: currentSize,
@@ -287,10 +288,27 @@ export const useDrawing = (pageSize = 'a4', pageOrientation = 'landscape') => {
   }, []);
 
   const getDrawingData = useCallback(() => {
+    // Return V2 schema page format with stroke IDs
+    const strokesWithIds = allStrokes.map(stroke => ({
+      id: stroke.id || crypto.randomUUID(), // Add ID if missing
+      tool: stroke.tool,
+      color: stroke.color,
+      size: stroke.size,
+      points: stroke.points.map(p => ({
+        x: p.x,
+        y: p.y,
+        pressure: p.pressure !== undefined ? p.pressure : 0.5
+      }))
+    }));
+
     return {
-      strokes: allStrokes,
-      background: background,
-      imageData: getCanvasDataURL()
+      // V2 page format
+      strokes: strokesWithIds,
+      backgroundPattern: background, // V2 uses backgroundPattern
+      // Keep imageData for backward compatibility during transition
+      imageData: getCanvasDataURL(),
+      // Legacy V1 field for old code
+      background: background
     };
   }, [allStrokes, background, getCanvasDataURL]);
 
@@ -305,14 +323,13 @@ export const useDrawing = (pageSize = 'a4', pageOrientation = 'landscape') => {
     const pageDims = getPageDimensions();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Set background first
-    if (data.background) {
-      setBackground(data.background);
-    }
+    // Set background - support both V1 (background) and V2 (backgroundPattern)
+    const bgPattern = data.backgroundPattern || data.background || 'plain';
+    setBackground(bgPattern);
 
     drawBackground(ctx, pageDims.width, pageDims.height);
 
-    // Load image if available - draw at logical size
+    // Load image if available - draw at logical size (for backward compatibility)
     if (data.imageData) {
       const img = new Image();
       img.onload = () => {
@@ -322,8 +339,12 @@ export const useDrawing = (pageSize = 'a4', pageOrientation = 'landscape') => {
       img.src = data.imageData;
     }
 
-    // Set strokes
-    setAllStrokes(data.strokes || []);
+    // Set strokes - ensure they have IDs for V2 schema
+    const strokesWithIds = (data.strokes || []).map(stroke => ({
+      ...stroke,
+      id: stroke.id || crypto.randomUUID()
+    }));
+    setAllStrokes(strokesWithIds);
   }, [getPageDimensions]);
 
   return {

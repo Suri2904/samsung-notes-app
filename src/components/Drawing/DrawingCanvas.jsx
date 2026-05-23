@@ -4,6 +4,7 @@ import { useAutoSave } from '../../hooks/useAutoSave';
 import { useZoomPan } from '../../hooks/useZoomPan';
 import { useToastContext } from '../../context/ToastContext';
 import { storage } from '../../utils/storage';
+import { migrateToCurrentSchema, detectSchemaVersion } from '../../utils/schemaMigration';
 import { DrawingToolbar } from './DrawingToolbar';
 import { PageManager } from './PageManager';
 import { ZoomControls } from './ZoomControls';
@@ -12,14 +13,30 @@ import jsPDF from 'jspdf';
 import './DrawingCanvas.css';
 
 export const DrawingCanvas = ({ drawing, onBack }) => {
-  const [editableTitle, setEditableTitle] = useState(drawing.title || 'Untitled Drawing');
-  const [pages, setPages] = useState(drawing.pages || [null]);
-  const [currentPage, setCurrentPage] = useState(0);
+  // Auto-migrate drawing to V2 schema if needed
+  const migratedDrawing = useMemo(() => {
+    const version = detectSchemaVersion(drawing);
+    return version < 2 ? migrateToCurrentSchema(drawing) : drawing;
+  }, [drawing]);
+
+  const [editableTitle, setEditableTitle] = useState(migratedDrawing.title || 'Untitled Drawing');
+  const [pages, setPages] = useState(migratedDrawing.pages || [{
+    id: crypto.randomUUID(),
+    size: 'A4',
+    orientation: 'landscape',
+    backgroundPattern: 'plain',
+    strokes: []
+  }]);
+  const [currentPage, setCurrentPage] = useState(migratedDrawing.currentPageIndex || 0);
   const [showBackgroundMenu, setShowBackgroundMenu] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showPageSizeMenu, setShowPageSizeMenu] = useState(false);
-  const [pageSize, setPageSize] = useState(drawing.pageSize || 'a4');
-  const [pageOrientation, setPageOrientation] = useState(drawing.orientation || 'landscape');
+
+  // Per-page size/orientation (V2 schema)
+  const currentPageConfig = pages[currentPage] || { size: 'A4', orientation: 'landscape' };
+  const [pageSize, setPageSize] = useState((currentPageConfig.size || 'A4').toLowerCase());
+  const [pageOrientation, setPageOrientation] = useState(currentPageConfig.orientation || 'landscape');
+
   const toast = useToastContext();
 
   const {
@@ -46,19 +63,46 @@ export const DrawingCanvas = ({ drawing, onBack }) => {
     canRedo
   } = useDrawing(pageSize, pageOrientation);
 
-  // Get complete drawing data for auto-save
+  // Get complete drawing data for auto-save (V2 schema)
   const getCompleteDrawingData = useCallback(() => {
     // Save current page first
     const currentPageData = getDrawingData();
-    const allPages = pages.map((page, i) => i === currentPage ? currentPageData : page);
+
+    // Update pages with V2 schema structure
+    const allPages = pages.map((page, i) => {
+      if (i === currentPage) {
+        // Current page: merge fresh drawing data
+        return {
+          id: page.id || crypto.randomUUID(),
+          size: pageSize.toUpperCase(),
+          orientation: pageOrientation,
+          backgroundPattern: currentPageData.backgroundPattern || currentPageData.background || 'plain',
+          strokes: currentPageData.strokes || []
+        };
+      } else {
+        // Other pages: ensure V2 format
+        return {
+          id: page.id || crypto.randomUUID(),
+          size: (page.size || 'A4').toUpperCase(),
+          orientation: page.orientation || 'landscape',
+          backgroundPattern: page.backgroundPattern || page.background || 'plain',
+          strokes: page.strokes || []
+        };
+      }
+    });
 
     return {
+      schemaVersion: 2,
+      id: migratedDrawing.id,
       title: editableTitle,
-      pageSize,
-      orientation: pageOrientation,
+      createdAt: migratedDrawing.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      zoom: zoom,
+      pan: pan,
+      currentPageIndex: currentPage,
       pages: allPages
     };
-  }, [editableTitle, pageSize, pageOrientation, pages, currentPage, getDrawingData]);
+  }, [editableTitle, pageSize, pageOrientation, pages, currentPage, getDrawingData, zoom, pan, migratedDrawing]);
 
   // Auto-save integration
   const { lastSaved, isSaving, debouncedSave } = useAutoSave(
@@ -79,6 +123,36 @@ export const DrawingCanvas = ({ drawing, onBack }) => {
 
   // Zoom and Pan
   const { zoom, pan, screenToCanvas, fitToPage, handleDoubleTap, setZoomLevel, setPanPosition } = useZoomPan(canvasRef);
+
+  // Helper: Update current page size (V2 per-page config)
+  const updatePageSize = useCallback((newSize) => {
+    setPageSize(newSize);
+    setPages(prev => {
+      const updated = [...prev];
+      if (updated[currentPage]) {
+        updated[currentPage] = {
+          ...updated[currentPage],
+          size: newSize.toUpperCase()
+        };
+      }
+      return updated;
+    });
+  }, [currentPage]);
+
+  // Helper: Update current page orientation (V2 per-page config)
+  const updatePageOrientation = useCallback((newOrientation) => {
+    setPageOrientation(newOrientation);
+    setPages(prev => {
+      const updated = [...prev];
+      if (updated[currentPage]) {
+        updated[currentPage] = {
+          ...updated[currentPage],
+          orientation: newOrientation
+        };
+      }
+      return updated;
+    });
+  }, [currentPage]);
 
   // Initialize canvas on mount
   useEffect(() => {
@@ -146,10 +220,17 @@ export const DrawingCanvas = ({ drawing, onBack }) => {
     }, 50);
   };
 
-  // Add new page
+  // Add new page (V2 schema with page config)
   const handleAddPage = () => {
     saveCurrentPage();
-    setPages(prev => [...prev, null]);
+    const newPage = {
+      id: crypto.randomUUID(),
+      size: 'A4',
+      orientation: 'landscape',
+      backgroundPattern: 'plain',
+      strokes: []
+    };
+    setPages(prev => [...prev, newPage]);
     setCurrentPage(pages.length);
     setTimeout(() => clearCanvas(), 50);
   };
@@ -184,20 +265,12 @@ export const DrawingCanvas = ({ drawing, onBack }) => {
     }, 50);
   };
 
-  // Export drawing as JSON file
+  // Export drawing as JSON file (V2 schema)
   const handleExportJSON = () => {
     saveCurrentPage();
 
-    const drawingFile = {
-      version: 1,
-      id: drawing.id,
-      title: editableTitle,
-      pageSize: pageSize,
-      orientation: pageOrientation,
-      pages: pages.map((page, i) => i === currentPage ? getDrawingData() : page),
-      createdAt: drawing.createdAt,
-      lastModified: new Date().toISOString()
-    };
+    // Use the V2 schema from getCompleteDrawingData
+    const drawingFile = getCompleteDrawingData();
 
     const blob = new Blob([JSON.stringify(drawingFile, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -329,13 +402,13 @@ export const DrawingCanvas = ({ drawing, onBack }) => {
                 <div className="menu-label">Size</div>
                 <button
                   className={pageSize === 'a4' ? 'active' : ''}
-                  onClick={() => { setPageSize('a4'); setShowPageSizeMenu(false); }}
+                  onClick={() => { updatePageSize('a4'); setShowPageSizeMenu(false); }}
                 >
                   A4 (210 × 297mm)
                 </button>
                 <button
                   className={pageSize === 'a3' ? 'active' : ''}
-                  onClick={() => { setPageSize('a3'); setShowPageSizeMenu(false); }}
+                  onClick={() => { updatePageSize('a3'); setShowPageSizeMenu(false); }}
                 >
                   A3 (297 × 420mm)
                 </button>
@@ -345,13 +418,13 @@ export const DrawingCanvas = ({ drawing, onBack }) => {
                 <div className="menu-label">Orientation</div>
                 <button
                   className={pageOrientation === 'portrait' ? 'active' : ''}
-                  onClick={() => { setPageOrientation('portrait'); setShowPageSizeMenu(false); }}
+                  onClick={() => { updatePageOrientation('portrait'); setShowPageSizeMenu(false); }}
                 >
                   ↕ Portrait
                 </button>
                 <button
                   className={pageOrientation === 'landscape' ? 'active' : ''}
-                  onClick={() => { setPageOrientation('landscape'); setShowPageSizeMenu(false); }}
+                  onClick={() => { updatePageOrientation('landscape'); setShowPageSizeMenu(false); }}
                 >
                   ↔ Landscape
                 </button>

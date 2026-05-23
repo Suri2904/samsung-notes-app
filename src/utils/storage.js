@@ -1,26 +1,50 @@
+import { migrateToCurrentSchema, detectSchemaVersion } from './schemaMigration';
+
 const STORAGE_KEY = 'samsung_notes_drawings';
 
 export const storage = {
-  // Get all saved drawings
+  // Get all saved drawings (auto-migrates to current schema)
   getAllDrawings() {
     try {
       const data = localStorage.getItem(STORAGE_KEY);
-      return data ? JSON.parse(data) : [];
+      if (!data) return [];
+
+      const drawings = JSON.parse(data);
+
+      // Auto-migrate any old format documents
+      const migratedDrawings = drawings.map(drawing => {
+        const version = detectSchemaVersion(drawing);
+        if (version < 2) {
+          console.log(`Migrating document "${drawing.title}" from V${version} to V2`);
+          return migrateToCurrentSchema(drawing);
+        }
+        return drawing;
+      });
+
+      // Save migrated documents back to storage if any were migrated
+      const hadMigrations = migratedDrawings.some((d, i) => d !== drawings[i]);
+      if (hadMigrations) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(migratedDrawings));
+      }
+
+      return migratedDrawings;
     } catch (err) {
       console.error('Failed to load drawings:', err);
       return [];
     }
   },
 
-  // Save a drawing
+  // Save a drawing (ensures V2 schema)
   saveDrawing(drawing) {
     try {
       const drawings = this.getAllDrawings();
       const existingIndex = drawings.findIndex(d => d.id === drawing.id);
 
+      // Ensure schema V2 and update timestamp
       const updatedDrawing = {
         ...drawing,
-        lastModified: new Date().toISOString()
+        schemaVersion: 2,
+        updatedAt: new Date().toISOString()
       };
 
       if (existingIndex >= 0) {

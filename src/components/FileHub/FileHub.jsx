@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef } from 'react';
 import { storage } from '../../utils/storage';
+import { migrateToCurrentSchema, detectSchemaVersion, validateV2Schema } from '../../utils/schemaMigration';
 import { FileCard } from './FileCard';
 import { useToastContext } from '../../context/ToastContext';
 import './FileHub.css';
@@ -128,21 +129,34 @@ export const FileHub = ({ onOpenDrawing, onNewDrawing }) => {
       try {
         const importedData = JSON.parse(event.target.result);
 
-        // Validate the imported data
+        // Validate basic structure
         if (!importedData.title || !importedData.pages) {
           toast.error('Invalid drawing file format');
           return;
         }
 
+        // Detect version and auto-migrate to V2
+        const version = detectSchemaVersion(importedData);
+        const migratedData = version < 2 ? migrateToCurrentSchema(importedData) : importedData;
+
         // Ensure it has a unique ID
-        if (!importedData.id) {
-          importedData.id = crypto.randomUUID();
+        if (!migratedData.id) {
+          migratedData.id = crypto.randomUUID();
         }
 
-        // Save to localStorage
-        storage.saveDrawing(importedData);
+        // Validate V2 schema
+        const validation = validateV2Schema(migratedData);
+        if (!validation.valid) {
+          console.warn('Schema validation warnings:', validation.errors);
+          // Continue anyway - migration should have fixed most issues
+        }
+
+        // Save to localStorage (storage.js will ensure V2 format)
+        storage.saveDrawing(migratedData);
         refreshDrawings();
-        toast.success(`Imported: ${importedData.title}`);
+
+        const versionInfo = version < 2 ? ` (migrated from V${version})` : '';
+        toast.success(`Imported: ${migratedData.title}${versionInfo}`);
 
         // Reset file input
         e.target.value = '';
@@ -191,13 +205,19 @@ export const FileHub = ({ onOpenDrawing, onNewDrawing }) => {
           return;
         }
 
-        if (!importedData.id) {
-          importedData.id = crypto.randomUUID();
+        // Auto-migrate to V2 schema
+        const version = detectSchemaVersion(importedData);
+        const migratedData = version < 2 ? migrateToCurrentSchema(importedData) : importedData;
+
+        if (!migratedData.id) {
+          migratedData.id = crypto.randomUUID();
         }
 
-        storage.saveDrawing(importedData);
+        storage.saveDrawing(migratedData);
         refreshDrawings();
-        toast.success(`Imported: ${importedData.title}`);
+
+        const versionInfo = version < 2 ? ` (migrated from V${version})` : '';
+        toast.success(`Imported: ${migratedData.title}${versionInfo}`);
       } catch (err) {
         toast.error('Failed to import file');
         console.error('Import failed:', err);
