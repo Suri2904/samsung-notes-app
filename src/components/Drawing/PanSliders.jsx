@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import './PanSliders.css';
 
 export const PanSliders = ({ zoom, pan, onPanChange, canvasRef }) => {
@@ -100,13 +100,20 @@ export const PanSliders = ({ zoom, pan, onPanChange, canvasRef }) => {
     stopDrag();
   }, []);
 
-  // Attach global listeners
-  if (typeof window !== 'undefined') {
+  // Attach global listeners with proper cleanup
+  useEffect(() => {
     window.addEventListener('mousemove', handleGlobalMove);
     window.addEventListener('mouseup', handleGlobalUp);
     window.addEventListener('touchmove', handleGlobalMove, { passive: false });
     window.addEventListener('touchend', handleGlobalUp);
-  }
+
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalMove);
+      window.removeEventListener('mouseup', handleGlobalUp);
+      window.removeEventListener('touchmove', handleGlobalMove);
+      window.removeEventListener('touchend', handleGlobalUp);
+    };
+  }, [handleGlobalMove, handleGlobalUp]);
 
   return (
     <>
