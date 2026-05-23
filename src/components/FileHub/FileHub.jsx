@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { storage } from '../../utils/storage';
 import { FileCard } from './FileCard';
 import { useToastContext } from '../../context/ToastContext';
@@ -10,6 +10,8 @@ export const FileHub = ({ onOpenDrawing, onNewDrawing }) => {
   const [sortBy, setSortBy] = useState('modified'); // 'modified', 'created', 'name', 'pages'
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef(null);
   const toast = useToastContext();
 
   // Refresh drawings list
@@ -112,14 +114,135 @@ export const FileHub = ({ onOpenDrawing, onNewDrawing }) => {
     );
   };
 
+  // Import JSON file
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileImport = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const importedData = JSON.parse(event.target.result);
+
+        // Validate the imported data
+        if (!importedData.title || !importedData.pages) {
+          toast.error('Invalid drawing file format');
+          return;
+        }
+
+        // Ensure it has a unique ID
+        if (!importedData.id) {
+          importedData.id = crypto.randomUUID();
+        }
+
+        // Save to localStorage
+        storage.saveDrawing(importedData);
+        refreshDrawings();
+        toast.success(`Imported: ${importedData.title}`);
+
+        // Reset file input
+        e.target.value = '';
+      } catch (err) {
+        toast.error('Failed to import file. Please make sure it\'s a valid .samsungnote.json file.');
+        console.error('Import failed:', err);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Drag and drop handlers
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (!file.name.endsWith('.json') && !file.name.endsWith('.samsungnote.json')) {
+      toast.error('Please drop a .json or .samsungnote.json file');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const importedData = JSON.parse(event.target.result);
+
+        if (!importedData.title || !importedData.pages) {
+          toast.error('Invalid drawing file format');
+          return;
+        }
+
+        if (!importedData.id) {
+          importedData.id = crypto.randomUUID();
+        }
+
+        storage.saveDrawing(importedData);
+        refreshDrawings();
+        toast.success(`Imported: ${importedData.title}`);
+      } catch (err) {
+        toast.error('Failed to import file');
+        console.error('Import failed:', err);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
-    <div className="file-hub">
+    <div
+      className={`file-hub ${isDragging ? 'dragging' : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Hidden file input for import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,.samsungnote.json"
+        style={{ display: 'none' }}
+        onChange={handleFileImport}
+      />
+
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="drag-overlay">
+          <div className="drag-message">
+            <div className="drag-icon">📥</div>
+            <h2>Drop to Import</h2>
+            <p>Drop your .samsungnote.json file here</p>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="file-hub-header">
         <h1>Samsung Notes</h1>
-        <button className="btn-new-drawing" onClick={onNewDrawing}>
-          ✏️ New Drawing
-        </button>
+        <div className="header-actions">
+          <button className="btn-import-drawing" onClick={handleImportClick}>
+            📥 Import
+          </button>
+          <button className="btn-new-drawing" onClick={onNewDrawing}>
+            ✏️ New Drawing
+          </button>
+        </div>
       </div>
 
       {/* Recent Files Strip */}
