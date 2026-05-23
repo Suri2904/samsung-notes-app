@@ -161,12 +161,28 @@ export const DrawingCanvas = ({ drawing, onBack }) => {
 
   // Load initial data once on mount
   useEffect(() => {
-    if (drawing.pages?.[0]) {
+    if (pages?.[0]) {
       setTimeout(() => {
-        loadDrawingData(drawing.pages[0]);
+        loadDrawingData(pages[0]);
       }, 100);
     }
   }, []); // Only run once on mount
+
+  // Sync pageSize/orientation state when page changes (V2 per-page config)
+  useEffect(() => {
+    const currentPageData = pages[currentPage];
+    if (currentPageData) {
+      const pageConfigSize = (currentPageData.size || 'A4').toLowerCase();
+      const pageConfigOrientation = currentPageData.orientation || 'landscape';
+
+      if (pageSize !== pageConfigSize) {
+        setPageSize(pageConfigSize);
+      }
+      if (pageOrientation !== pageConfigOrientation) {
+        setPageOrientation(pageConfigOrientation);
+      }
+    }
+  }, [currentPage, pages]);
 
   // Trigger auto-save on stroke end, page change, tool change
   useEffect(() => {
@@ -195,10 +211,19 @@ export const DrawingCanvas = ({ drawing, onBack }) => {
     const drawingData = getDrawingData();
     setPages(prev => {
       const updated = [...prev];
-      updated[currentPage] = drawingData;
+      const currentPageConfig = updated[currentPage] || {};
+
+      // Merge drawing data with existing page config (V2 schema)
+      updated[currentPage] = {
+        id: currentPageConfig.id || crypto.randomUUID(),
+        size: (pageSize || 'a4').toUpperCase(),
+        orientation: pageOrientation || 'landscape',
+        backgroundPattern: drawingData.backgroundPattern || drawingData.background || 'plain',
+        strokes: drawingData.strokes || []
+      };
       return updated;
     });
-  }, [currentPage, getDrawingData]);
+  }, [currentPage, getDrawingData, pageSize, pageOrientation]);
 
   // Handle page change
   const handlePageChange = (newPage) => {
