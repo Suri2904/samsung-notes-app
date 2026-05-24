@@ -16,6 +16,41 @@
   max-height: 85vh;
   overflow-y: auto;
   border: 1px solid rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+}
+
+.drawing-toolbar.collapsed {
+  padding: 8px;
+  width: auto;
+}
+
+.collapsed-toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.current-tool-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--samsung-blue);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 8px rgba(18, 89, 195, 0.3);
+  transition: transform 0.2s ease;
+}
+
+.current-tool-btn:hover {
+  transform: scale(1.05);
+}
+
+.current-tool-btn .tool-icon {
+  font-size: 22px;
 }
 
 .toolbar-section {
@@ -184,4 +219,46 @@
 .redo-btn {
   font-size: 20px;
   font-weight: bold;
+}
+
+/* Palm Rejection Toggle */
+.palm-rejection-section {
+  margin-top: 8px;
+}
+
+.palm-rejection-btn {
+  width: 44px;
+  height: 60px;
+  border-radius: 8px;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: var(--transition-fast);
+  cursor: pointer;
+  border: 2px solid var(--border);
+  padding: 4px;
+}
+
+.palm-rejection-btn:hover {
+  background: var(--samsung-blue-light);
+  border-color: var(--samsung-blue);
+}
+
+.palm-rejection-btn.active {
+  background: var(--samsung-blue);
+  color: white;
+  border-color: var(--samsung-blue);
+}
+
+.palm-icon {
+  font-size: 18px;
+}
+
+.palm-status {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }

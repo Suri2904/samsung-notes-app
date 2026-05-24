@@ -53,6 +53,8 @@ export const DrawingCanvas = ({ drawing, onBack }) => {
     setCurrentSize,
     background,
     setBackground,
+    palmRejection,
+    setPalmRejection,
     undo,
     redo,
     clearCanvas,
@@ -264,26 +266,32 @@ export const DrawingCanvas = ({ drawing, onBack }) => {
   const handleDeletePage = (pageIndex) => {
     if (pages.length === 1) return; // Can't delete last page
 
-    setPages(prev => prev.filter((_, i) => i !== pageIndex));
-
-    // Adjust current page after deletion
-    if (pageIndex === pages.length - 1) {
-      // Deleted last page, go to previous
-      setCurrentPage(pageIndex - 1);
+    // Calculate new page index before deletion
+    let newCurrentPage = currentPage;
+    if (pageIndex === currentPage) {
+      // Deleting current page
+      if (pageIndex === pages.length - 1) {
+        // Deleting last page, go to previous
+        newCurrentPage = pageIndex - 1;
+      }
+      // If deleting current page but not the last one, stay at same index (which will show next page)
     } else if (pageIndex < currentPage) {
-      // Deleted page before current, adjust index
-      setCurrentPage(currentPage - 1);
+      // Deleting a page before current, shift index down
+      newCurrentPage = currentPage - 1;
     }
-    // If deleted page after current, currentPage stays same
+
+    // Get the page data before filtering
+    const updatedPages = pages.filter((_, i) => i !== pageIndex);
+    const pageToLoad = updatedPages[newCurrentPage];
+
+    // Update state
+    setPages(updatedPages);
+    setCurrentPage(newCurrentPage);
 
     // Load the new current page
     setTimeout(() => {
-      const newIndex = pageIndex === pages.length - 1 ? pageIndex - 1 :
-                       pageIndex < currentPage ? currentPage - 1 : currentPage;
-      const pageData = pages[newIndex];
-
-      if (pageData) {
-        loadDrawingData(pageData);
+      if (pageToLoad) {
+        loadDrawingData(pageToLoad);
       } else {
         clearCanvas();
       }
@@ -551,6 +559,8 @@ export const DrawingCanvas = ({ drawing, onBack }) => {
         onColorChange={setCurrentColor}
         currentSize={currentSize}
         onSizeChange={setCurrentSize}
+        palmRejection={palmRejection}
+        onPalmRejectionToggle={setPalmRejection}
         onUndo={undo}
         onRedo={redo}
         canUndo={canUndo}

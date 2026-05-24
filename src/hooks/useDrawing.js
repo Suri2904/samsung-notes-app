@@ -11,9 +11,11 @@ export const useDrawing = (pageSize = 'a4', pageOrientation = 'landscape') => {
   const [historyStep, setHistoryStep] = useState(-1);
   const [background, setBackground] = useState('plain'); // plain, ruled, grid, dots
   const [allStrokes, setAllStrokes] = useState([]); // All strokes for this page
+  const [palmRejection, setPalmRejection] = useState(false); // Palm rejection toggle
   const lastPointRef = useRef(null);
   const strokePathRef = useRef([]);
   const currentStrokeRef = useRef(null);
+  const previousToolRef = useRef('pen'); // Track tool before auto-deselect
 
   const getPageDimensions = useCallback(() => {
     // A4: 210mm x 297mm = 794px x 1123px at 96 DPI
@@ -187,6 +189,9 @@ export const useDrawing = (pageSize = 'a4', pageOrientation = 'landscape') => {
     if (currentTool === 'hand') return;
     if (e.pointerType === 'touch' && e.touches?.length > 1) return; // Ignore multi-touch
 
+    // Palm rejection: ignore touch input if enabled and using stylus
+    if (palmRejection && e.pointerType === 'touch') return;
+
     const ctx = contextRef.current;
     if (!ctx) return;
 
@@ -223,7 +228,7 @@ export const useDrawing = (pageSize = 'a4', pageOrientation = 'landscape') => {
 
     ctx.beginPath();
     ctx.moveTo(pos.x, pos.y);
-  }, [currentTool, currentColor, currentSize]);
+  }, [currentTool, currentColor, currentSize, palmRejection]);
 
   const draw = useCallback((e) => {
     if (!isDrawing || currentTool === 'hand') return;
@@ -420,6 +425,8 @@ export const useDrawing = (pageSize = 'a4', pageOrientation = 'landscape') => {
     setCurrentSize,
     background,
     setBackground,
+    palmRejection,
+    setPalmRejection,
     undo,
     redo,
     clearCanvas,
